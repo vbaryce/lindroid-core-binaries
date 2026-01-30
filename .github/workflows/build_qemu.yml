@@ -50,11 +50,13 @@ jobs:
           mkdir -p output
           
           # Setup NDK Variables
+          # In newer NDKs (r23+), 'ar', 'nm', 'ranlib' are all symlinks to 'llvm-ar', 'llvm-nm', etc.
+          # We must use 'llvm-ar' directly if the prefixed versions are missing.
+          
           TOOLCHAIN_BIN="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin"
           
           if [ "${{ matrix.arch }}" == "aarch64" ]; then
             CROSS_PREFIX="${TOOLCHAIN_BIN}/aarch64-linux-android-"
-            # Clang needs full version for CC
             export CC="${TOOLCHAIN_BIN}/aarch64-linux-android${{ matrix.api }}-clang"
             export CXX="${TOOLCHAIN_BIN}/aarch64-linux-android${{ matrix.api }}-clang++"
             QEMU_TARGET="aarch64-softmmu"
@@ -65,18 +67,26 @@ jobs:
             QEMU_TARGET="x86_64-softmmu"
           fi
           
-          export AR="${CROSS_PREFIX}ar"
-          export NM="${CROSS_PREFIX}nm"
-          export STRIP="${CROSS_PREFIX}strip"
-          export RANLIB="${CROSS_PREFIX}ranlib"
+          # Force use of llvm- tools as newer NDKs dropped GCC binutils
+          export AR="${TOOLCHAIN_BIN}/llvm-ar"
+          export NM="${TOOLCHAIN_BIN}/llvm-nm"
+          export STRIP="${TOOLCHAIN_BIN}/llvm-strip"
+          export RANLIB="${TOOLCHAIN_BIN}/llvm-ranlib"
+          export OBJCOPY="${TOOLCHAIN_BIN}/llvm-objcopy"
           
           echo "Configuring QEMU for ${{ matrix.arch }}..."
+          echo "Using AR: $AR"
           
           # Minimal configuration for Android
           ./configure \
             --cross-prefix="${CROSS_PREFIX}" \
             --cc="$CC" \
             --cxx="$CXX" \
+            --objcc="$CC" \
+            --ar="$AR" \
+            --nm="$NM" \
+            --strip="$STRIP" \
+            --ranlib="$RANLIB" \
             --target-list="${QEMU_TARGET}" \
             --disable-docs \
             --disable-tools \
@@ -94,8 +104,6 @@ jobs:
           # Prepare Output
           mkdir -p ../dist
           cp build/${QEMU_TARGET}/qemu-system-${{ matrix.arch }} ../dist/
-          # Copy qemu-img if built (it might be disabled by disable-tools, enabling basic tools only if needed)
-          # For now, stick to system binary
           
           cd ..
           
