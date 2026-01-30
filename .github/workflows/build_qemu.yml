@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload Artifact (Push Mode)
         if: github.event_name == 'push'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: lindroid-core-${{ matrix.arch }}
           path: dist/lindroid-core-${{ matrix.arch }}.zip
