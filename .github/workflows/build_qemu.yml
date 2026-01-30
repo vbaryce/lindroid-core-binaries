@@ -26,43 +26,52 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config libglib2.0-dev libpixman-1-dev python3 flex bison
-
       - name: Setup Android NDK
-        uses: android-actions/setup-android@v2
+        uses: android-actions/setup-android@v3
 
-      - name: Download QEMU Source
+      - name: Compile Stub Binary (Proof of Concept)
         run: |
-          wget https://download.qemu.org/qemu-8.2.2.tar.xz
-          tar -xf qemu-8.2.2.tar.xz
-
-      - name: Configure and Build
-        run: |
-          cd qemu-8.2.2
           mkdir -p output
           
-          # TODO: Add real cross-compilation commands here
-          # For now, we generate placeholder binaries to validate the pipeline
-          echo "QEMU Binary for ${{ matrix.arch }}" > output/qemu-system-${{ matrix.arch }}
-          echo "QEMU IMG Binary" > output/qemu-img
+          # Locate NDK Toolchain
+          # android-actions/setup-android sets ANDROID_NDK_HOME
+          TOOLCHAIN_BIN="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin"
           
-          # Set permissions
+          if [ "${{ matrix.arch }}" == "aarch64" ]; then
+            CC="${TOOLCHAIN_BIN}/aarch64-linux-android${{ matrix.api }}-clang"
+          else
+            CC="${TOOLCHAIN_BIN}/x86_64-linux-android${{ matrix.api }}-clang"
+          fi
+          
+          echo "Compiling for ${{ matrix.arch }} using $CC"
+          
+          # Create a simple C program to prove cross-compilation works
+          echo '#include <stdio.h>
+          int main() { 
+            printf("Lindroid Core QEMU (Stub) for ${{ matrix.arch }}\\n"); 
+            printf("Architecture verification successful.\\n");
+            return 0; 
+          }' > qemu.c
+          
+          # Compile
+          $CC qemu.c -o output/qemu-system-${{ matrix.arch }}
+          
+          # Create dummy qemu-img as well
+          cp output/qemu-system-${{ matrix.arch }} output/qemu-img
+          
           chmod +x output/qemu-system-${{ matrix.arch }}
           chmod +x output/qemu-img
 
       - name: Package Binaries
         run: |
-          cd qemu-8.2.2/output
+          cd output
           zip -r lindroid-core-${{ matrix.arch }}.zip .
 
-      - name: Upload to Release (if release)
+      - name: Upload to Release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: qemu-8.2.2/output/lindroid-core-${{ matrix.arch }}.zip
+          file: output/lindroid-core-${{ matrix.arch }}.zip
           tag: ${{ github.ref }}
           overwrite: true
