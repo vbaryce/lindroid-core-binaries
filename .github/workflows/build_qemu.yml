@@ -2,6 +2,8 @@ name: Build QEMU Android
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ "main" ]
   release:
     types: [created]
 
@@ -110,3 +112,10 @@ jobs:
           file: dist/lindroid-core-${{ matrix.arch }}.zip
           tag: ${{ github.ref }}
           overwrite: true
+
+      - name: Upload Artifact (Push Mode)
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v3
+        with:
+          name: lindroid-core-${{ matrix.arch }}
+          path: dist/lindroid-core-${{ matrix.arch }}.zip
