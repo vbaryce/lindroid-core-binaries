@@ -5,6 +5,9 @@ on:
   release:
     types: [created]
 
+permissions:
+  contents: write
+
 jobs:
   build-qemu:
     name: Build QEMU for ${{ matrix.arch }}
