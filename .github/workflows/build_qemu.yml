@@ -18,53 +18,88 @@ jobs:
           - arch: aarch64
             target: aarch64-linux-android
             api: 24
+            cpu: cortex-a57
           - arch: x86_64
             target: x86_64-linux-android
             api: 24
+            cpu: Westmere
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
 
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libglib2.0-dev libpixman-1-dev python3 flex bison
+
       - name: Setup Android NDK
         uses: android-actions/setup-android@v3
 
-      - name: Compile Stub Binary (Proof of Concept)
+      - name: Download QEMU Source
         run: |
+          echo "Downloading QEMU Source..."
+          wget https://download.qemu.org/qemu-8.2.2.tar.xz
+          tar -xf qemu-8.2.2.tar.xz
+
+      - name: Configure and Build
+        run: |
+          cd qemu-8.2.2
           mkdir -p output
           
-          # Locate NDK Toolchain
-          # android-actions/setup-android sets ANDROID_NDK_HOME
+          # Setup NDK Variables
           TOOLCHAIN_BIN="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin"
           
           if [ "${{ matrix.arch }}" == "aarch64" ]; then
-            CC="${TOOLCHAIN_BIN}/aarch64-linux-android${{ matrix.api }}-clang"
+            CROSS_PREFIX="${TOOLCHAIN_BIN}/aarch64-linux-android-"
+            # Clang needs full version for CC
+            export CC="${TOOLCHAIN_BIN}/aarch64-linux-android${{ matrix.api }}-clang"
+            export CXX="${TOOLCHAIN_BIN}/aarch64-linux-android${{ matrix.api }}-clang++"
+            QEMU_TARGET="aarch64-softmmu"
           else
-            CC="${TOOLCHAIN_BIN}/x86_64-linux-android${{ matrix.api }}-clang"
+            CROSS_PREFIX="${TOOLCHAIN_BIN}/x86_64-linux-android-"
+            export CC="${TOOLCHAIN_BIN}/x86_64-linux-android${{ matrix.api }}-clang"
+            export CXX="${TOOLCHAIN_BIN}/x86_64-linux-android${{ matrix.api }}-clang++"
+            QEMU_TARGET="x86_64-softmmu"
           fi
           
-          echo "Compiling for ${{ matrix.arch }} using $CC"
+          export AR="${CROSS_PREFIX}ar"
+          export NM="${CROSS_PREFIX}nm"
+          export STRIP="${CROSS_PREFIX}strip"
+          export RANLIB="${CROSS_PREFIX}ranlib"
           
-          # Create a simple C program to prove cross-compilation works
-          echo '#include <stdio.h>
-          int main() { 
-            printf("Lindroid Core QEMU (Stub) for ${{ matrix.arch }}\\n"); 
-            printf("Architecture verification successful.\\n");
-            return 0; 
-          }' > qemu.c
+          echo "Configuring QEMU for ${{ matrix.arch }}..."
           
-          # Compile
-          $CC qemu.c -o output/qemu-system-${{ matrix.arch }}
+          # Minimal configuration for Android
+          ./configure \
+            --cross-prefix="${CROSS_PREFIX}" \
+            --cc="$CC" \
+            --cxx="$CXX" \
+            --target-list="${QEMU_TARGET}" \
+            --disable-docs \
+            --disable-tools \
+            --disable-guest-agent \
+            --disable-sdl \
+            --disable-gtk \
+            --disable-vnc \
+            --disable-kvm \
+            --enable-pie \
+            --static
+            
+          echo "Building..."
+          make -j$(nproc)
           
-          # Create dummy qemu-img as well
-          cp output/qemu-system-${{ matrix.arch }} output/qemu-img
+          # Prepare Output
+          mkdir -p ../dist
+          cp build/${QEMU_TARGET}/qemu-system-${{ matrix.arch }} ../dist/
+          # Copy qemu-img if built (it might be disabled by disable-tools, enabling basic tools only if needed)
+          # For now, stick to system binary
           
-          chmod +x output/qemu-system-${{ matrix.arch }}
-          chmod +x output/qemu-img
-
+          cd ..
+          
       - name: Package Binaries
         run: |
-          cd output
+          cd dist
           zip -r lindroid-core-${{ matrix.arch }}.zip .
 
       - name: Upload to Release
@@ -72,6 +107,6 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: output/lindroid-core-${{ matrix.arch }}.zip
+          file: dist/lindroid-core-${{ matrix.arch }}.zip
           tag: ${{ github.ref }}
           overwrite: true
