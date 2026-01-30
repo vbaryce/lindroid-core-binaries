@@ -78,15 +78,11 @@ jobs:
           echo "Using AR: $AR"
           
           # Minimal configuration for Android
+          # Rely on env vars for AR, NM, etc.
           ./configure \
             --cross-prefix="${CROSS_PREFIX}" \
             --cc="$CC" \
             --cxx="$CXX" \
-            --objcc="$CC" \
-            --ar="$AR" \
-            --nm="$NM" \
-            --strip="$STRIP" \
-            --ranlib="$RANLIB" \
             --target-list="${QEMU_TARGET}" \
             --disable-docs \
             --disable-tools \
